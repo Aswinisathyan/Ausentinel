@@ -1,0 +1,65 @@
+
+VOICEGUARD AI
+ASVspoof 2019 LA - FINAL EVALUATION REPORT
+============================================================
+
+MODEL
+------------------------------------------------------------
+Classifier: LFCC + RBF-SVM
+Feature dimension: 80
+Threshold: 0.455310
+Threshold source: Frozen development-set selection
+
+DATASET
+------------------------------------------------------------
+Protocol samples: 71237
+Bonafide samples: 7355
+Spoof samples: 63882
+Audio files in directory: 71933
+Unlisted audio files excluded: 696
+
+PERFORMANCE
+------------------------------------------------------------
+Accuracy:           0.687803 (68.78%)
+Balanced Accuracy:  0.808785 (80.88%)
+Precision:          0.993248
+Recall:             0.656319
+F1-score:           0.790375
+ROC-AUC:            0.922848
+Interpolated EER:   0.151869 (15.19%)
+
+CONFUSION MATRIX
+------------------------------------------------------------
+True Negative (TN): 7070
+False Positive (FP): 285
+False Negative (FN): 21955
+True Positive (TP): 41927
+
+ASVspoof ERROR METRICS
+------------------------------------------------------------
+APCER: 0.343681 (34.37%)
+BPCER: 0.038749 (3.87%)
+ACER:  0.191215 (19.12%)
+
+INTERPRETATION
+------------------------------------------------------------
+APCER: Proportion of spoof samples classified as bonafide.
+BPCER: Proportion of bonafide samples classified as spoof.
+ACER: Average of APCER and BPCER.
+
+EER is calculated from the ROC curve and is descriptive.
+The reported predictions use the frozen development threshold.
+The evaluation labels were not used to select that threshold.
+
+OUTPUT FILES
+------------------------------------------------------------
+predictions.csv
+attack_metrics.csv
+confusion_matrix.png
+roc_curve.png
+score_distribution.png
+evaluation_features.npy
+feature_status.npy
+protocol_hash.txt
+
+============================================================

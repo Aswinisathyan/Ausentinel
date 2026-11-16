@@ -1,0 +1,32 @@
+check,result,detail
+Model expects 80 features,PASS,
+Cached features are 80-dimensional,PASS,"(24844, 80)"
+Cached features are finite,PASS,
+Protocol column 3 is blank in every row,PASS,
+Protocol column 4 holds only '-' and A01-A06,PASS,
+Bona fide rows have no attack ID and spoof rows do,PASS,
+Cached labels match protocol order,PASS,rows=24844
+Re-extracted features match cached rows,PASS,"12 files, largest gap 0.00e+00"
+predict() equals score > 0,PASS,
+ASV scores line up with the ASV trial protocol,PASS,trials=29548
+"t-DCF priors sum to one and C1, C2 are positive",PASS,C1=0.91536 C2=0.38014
+ASV spoof trials per attack match the CM protocol,PASS,
+Sweep rates match sklearn confusion matrices,PASS,"205 thresholds, largest gap 0.0e+00"
+Vectorised sweep matches direct counting,PASS,
+Minimum ACER matches an independent ROC scan,PASS,7.1247%
+Minimum ACER matches sklearn det_curve,PASS,
+AUC matches sklearn,PASS,0.98185
+EER matches official-style scoring code,PASS,"official 7.2122%, study 7.2122%"
+Interpolated EER matches evaluate.py method and baseline,PASS,7.2031%
+Reported figures reproduced at default threshold,PASS,"accuracy 96.192, APCER 2.453, BPCER 15.659, ACER 9.056"
+Reported figures reproduced at threshold 0.488,PASS,"accuracy 92.328, APCER 7.813, BPCER 6.436, ACER 7.125"
+Reported AUC reproduced,PASS,0.98185
+Existing threshold_results.csv agrees with the sweep,PASS,"201 rows, largest ACER gap 0.0e+00"
+Min t-DCF matches official-style scoring code,PASS,0.20760
+Min t-DCF does not exceed the default cost of 1,PASS,
+Drawing each speaker once reproduces every full-dev value,PASS,
+Every bootstrap replicate produced finite results,PASS,5000 speaker and 5000 file replicates
+Every speaker-bootstrap interval contains its fixed-threshold value,PASS,
+Mean attack APCER equals pooled APCER (attacks are balanced),PASS,
+Speaker error counts sum to the pooled counts,PASS,
+"Model, scripts and existing artifacts are byte-identical",PASS,12 files hashed

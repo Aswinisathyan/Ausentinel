@@ -1,0 +1,16 @@
+{
+  "selected_candidate": "EER",
+  "threshold": 0.45531001191744624,
+  "decision_rule": "classify spoof when decision_function(x) >= threshold",
+  "selection_data": "ASVspoof 2019 LA development set only; evaluation data not read",
+  "rule": "Lowest leave-one-speaker-out pooled ACER among ['EER', 'min_ACER', 'plateau_midpoint']; candidates whose paired out-of-bag ACER difference interval includes zero count as tied, and the tied candidate with the lowest speaker-bootstrap threshold SD is chosen.",
+  "lowest_held_out_ACER_candidate": "EER",
+  "tied_candidates": [
+    "EER",
+    "min_ACER",
+    "plateau_midpoint"
+  ],
+  "model_sha256": "fdadcccb98cf3dc18d3aee902746c185b2f56fc70db3aae596121b060a7c08c4",
+  "n_bootstrap": 5000,
+  "seed": 2019
+}

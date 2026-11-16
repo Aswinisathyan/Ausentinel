@@ -1,0 +1,12 @@
+__pycache__/
+.venv/
+.env
+*.pyc
+data/
+artifacts/*.joblib
+# Large generated feature and score files
+*.npz
+*.npy
+artifacts/threshold_study/bootstrap_thresholds.csv
+artifacts/threshold_study/threshold_sweep_full.csv
+
