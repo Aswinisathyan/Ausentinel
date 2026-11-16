@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ausentinel</title>
+  <style>
+    body { font-family: system-ui, "Segoe UI", sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #0b0b0b; background: #fcfcfb; }
+    h1 { margin-bottom: 4px; }
+    .muted { color: #52514e; }
+    form, .box { border: 1px solid #e1e0d9; border-radius: 8px; padding: 16px; margin-top: 20px; }
+    button { margin-top: 12px; padding: 8px 16px; }
+    .error { border-color: #d03b3b; color: #d03b3b; }
+    table { border-collapse: collapse; margin-top: 8px; }
+    td { padding: 4px 12px 4px 0; }
+    .note { font-size: 0.9em; }
+  </style>
+</head>
+<body>
+  <h1>Ausentinel</h1>
+  <p class="muted">Audio spoof detection with LFCC features and an RBF-SVM classifier.</p>
+
+  <form action="{{ url_for('predict_page') }}" method="post" enctype="multipart/form-data">
+    <label for="audio">Audio file ({{ allowed }}, up to {{ max_upload_mb }} MB)</label><br>
+    <input id="audio" type="file" name="audio" accept=".wav,.flac" required>
+    <br>
+    <button type="submit">Analyse</button>
+  </form>
+
+  {% if error %}
+  <div class="box error" role="alert">{{ error }}</div>
+  {% endif %}
+
+  {% if result %}
+  <div class="box">
+    <h2>Result: {{ "Spoof" if result.is_spoof else "Bona fide" }}</h2>
+    <table>
+      <tr><td>File</td><td>{{ result.filename }}</td></tr>
+      <tr><td>Score</td><td>{{ "%.4f"|format(result.score) }}</td></tr>
+      <tr><td>Threshold</td><td>{{ "%.4f"|format(result.threshold) }}</td></tr>
+      <tr><td>Distance from threshold</td><td>{{ "%+.4f"|format(result.margin) }}</td></tr>
+      <tr><td>Duration</td><td>{{ result.duration_seconds }} s (analysed {{ result.analysed_seconds }} s)</td></tr>
+      <tr><td>Sample rate</td><td>{{ result.sample_rate }} Hz</td></tr>
+    </table>
+
+    {% for warning in result.warnings %}
+    <p>Note: {{ warning }}</p>
+    {% endfor %}
+
+    <p class="note muted">{{ result.note }}</p>
+  </div>
+  {% endif %}
+</body>
+</html>
