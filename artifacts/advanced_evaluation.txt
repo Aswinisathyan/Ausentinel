@@ -1,0 +1,30 @@
+LFCC + RBF-SVM MODEL EVALUATION
+=============================================
+
+Accuracy: 0.9619
+Balanced Accuracy: 0.9094
+Spoof Precision: 0.9820
+Spoof Recall: 0.9755
+Spoof F1-score: 0.9787
+
+ROC-AUC: 0.9818
+EER: 0.0720
+EER Percentage: 7.20%
+
+APCER: 0.0245
+BPCER: 0.1566
+ACER: 0.0906
+
+Confusion Matrix:
+[[ 2149   399]
+ [  547 21749]]
+
+Classification Report:
+              precision    recall  f1-score   support
+
+    bonafide       0.80      0.84      0.82      2548
+       spoof       0.98      0.98      0.98     22296
+
+    accuracy                           0.96     24844
+   macro avg       0.89      0.91      0.90     24844
+weighted avg       0.96      0.96      0.96     24844
