@@ -1,5 +1,6 @@
 
 import io
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -7,7 +8,7 @@ import pytest
 import soundfile as sf
 
 from app import create_app
-from inference import SpoofDetector
+from inference import SpoofDetector, ffmpeg_executable
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -55,6 +56,29 @@ def audio_bytes(duration=2.0, sample_rate=16000, file_format="WAV", channels=1):
     buffer.seek(0)
 
     return buffer
+
+
+def compressed_bytes(tmp_path, extension):
+    """Encode a test tone as MP3 or M4A with the bundled ffmpeg."""
+
+    source = tmp_path / "source.wav"
+    target = tmp_path / f"encoded{extension}"
+
+    source.write_bytes(audio_bytes().read())
+
+    subprocess.run(
+        [ffmpeg_executable(), "-nostdin", "-loglevel", "error", "-y",
+         "-i", str(source), str(target)],
+        check=True,
+        capture_output=True,
+    )
+
+    data = io.BytesIO(target.read_bytes())
+
+    source.unlink()
+    target.unlink()
+
+    return data
 
 
 def upload(client, data, filename, path="/api/predict"):
@@ -138,11 +162,47 @@ def test_html_form_shows_result(client):
     assert b"experimental prediction" in response.data
 
 
-def test_uploads_are_deleted(client, upload_dir):
+def test_api_scores_m4a(client, tmp_path_factory):
+
+    data = compressed_bytes(tmp_path_factory.mktemp("encode"), ".m4a")
+
+    response = upload(client, data, "tone.m4a")
+    result = response.json
+
+    assert response.status_code == 200
+    assert result["format"] == "M4A"
+    assert result["duration_seconds"] == pytest.approx(2.0, abs=0.1)
+    assert any("compressed format" in w for w in result["warnings"])
+
+
+def test_corrupt_m4a(client):
+
+    response = upload(client, io.BytesIO(b"this is not audio"), "fake.m4a")
+
+    assert response.status_code == 422
+    assert "could not be read" in response.json["error"]
+
+
+def test_mp3_is_rejected_with_reason(client, tmp_path_factory):
+
+    data = compressed_bytes(tmp_path_factory.mktemp("encode"), ".mp3")
+
+    response = upload(client, data, "tone.mp3")
+
+    assert response.status_code == 415
+    assert "MP3 compression" in response.json["error"]
+
+
+def test_uploads_are_deleted(client, upload_dir, tmp_path_factory):
+
+    m4a = compressed_bytes(tmp_path_factory.mktemp("encode"), ".m4a")
 
     upload(client, audio_bytes(), "tone.wav")
+    upload(client, m4a, "tone.m4a")
     upload(client, io.BytesIO(b"not audio"), "broken.wav")
+    upload(client, io.BytesIO(b"not audio"), "broken.m4a")
 
+    # Covers both the upload and the WAV converted from it
     assert list(upload_dir.iterdir()) == []
 
 

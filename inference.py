@@ -1,6 +1,9 @@
 
 from pathlib import Path
 import json
+import os
+import subprocess
+import tempfile
 
 import joblib
 import librosa
@@ -27,6 +30,30 @@ MODEL_NAME = "LFCC + RBF-SVM"
 SHORT_AUDIO_SECONDS = 1.0
 SILENCE_PEAK = 1e-4
 
+# Read directly by soundfile
+NATIVE_EXTENSIONS = {".wav", ".flac"}
+
+# Converted to WAV with ffmpeg first
+FFMPEG_EXTENSIONS = {".mp3", ".m4a"}
+
+# Decodable, but the model gives misleading results on them.
+# On 60 dev files, MP3 encoding turned all 30 bona fide files into
+# "spoof" (it removes most 7-8 kHz energy), while AAC/M4A changed
+# no labels. Remove MP3 from here only after retraining on MP3 audio.
+UNRELIABLE_EXTENSIONS = {
+    ".mp3": (
+        "MP3 files are not supported. Testing showed that MP3 compression "
+        "makes this model label genuine speech as spoof. Please upload "
+        "WAV, FLAC or M4A audio instead."
+    ),
+}
+
+SUPPORTED_EXTENSIONS = (
+    NATIVE_EXTENSIONS | FFMPEG_EXTENSIONS
+) - set(UNRELIABLE_EXTENSIONS)
+
+FFMPEG_TIMEOUT_SECONDS = 30
+
 
 # --------------------------------------------------
 # 2. ERRORS
@@ -37,7 +64,59 @@ class AudioError(ValueError):
 
 
 # --------------------------------------------------
-# 3. DETECTOR
+# 3. FFMPEG CONVERSION
+# --------------------------------------------------
+
+def ffmpeg_executable():
+    """Path to the ffmpeg binary bundled with the imageio-ffmpeg package."""
+
+    try:
+        import imageio_ffmpeg
+    except ImportError as error:
+        raise AudioError(
+            "MP3 and M4A support needs the imageio-ffmpeg package."
+        ) from error
+
+    return imageio_ffmpeg.get_ffmpeg_exe()
+
+
+def convert_to_wav(source, destination):
+    """
+    Decode the first audio stream to 32-bit float WAV.
+
+    Sample rate and channels are kept, so features.extract_lfcc does
+    the same mono conversion and resampling as for WAV and FLAC files.
+    """
+
+    command = [
+        ffmpeg_executable(),
+        "-nostdin",
+        "-hide_banner",
+        "-loglevel", "error",
+        "-y",
+        "-i", str(source),
+        "-map", "0:a:0",
+        "-vn",
+        "-acodec", "pcm_f32le",
+        "-f", "wav",
+        str(destination),
+    ]
+
+    try:
+        subprocess.run(
+            command,
+            capture_output=True,
+            timeout=FFMPEG_TIMEOUT_SECONDS,
+            check=True,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise AudioError("The audio file took too long to decode.") from error
+    except subprocess.CalledProcessError as error:
+        raise AudioError("The file could not be read as audio.") from error
+
+
+# --------------------------------------------------
+# 4. DETECTOR
 # --------------------------------------------------
 
 class SpoofDetector:
@@ -64,12 +143,47 @@ class SpoofDetector:
 
     def predict_file(self, path):
 
+        extension = Path(path).suffix.lower()
+
+        if extension in UNRELIABLE_EXTENSIONS:
+            raise AudioError(UNRELIABLE_EXTENSIONS[extension])
+
+        if extension not in SUPPORTED_EXTENSIONS:
+            raise AudioError("Unsupported audio format.")
+
+        if extension in NATIVE_EXTENSIONS:
+            return self._predict_readable(path, extension.lstrip(".").upper())
+
+        handle, wav_path = tempfile.mkstemp(
+            suffix=".wav",
+            dir=Path(path).parent,
+        )
+        os.close(handle)
+
+        try:
+            convert_to_wav(path, wav_path)
+
+            result = self._predict_readable(
+                wav_path,
+                extension.lstrip(".").upper(),
+            )
+
+        finally:
+            os.remove(wav_path)
+
+        result["warnings"].append(
+            f"{result['format']} is a compressed format. The model was "
+            "trained on lossless FLAC audio, so this result is less reliable."
+        )
+
+        return result
+
+    def _predict_readable(self, path, file_format):
+
         try:
             info = sf.info(str(path))
         except Exception as error:
-            raise AudioError(
-                "The file could not be read as WAV or FLAC audio."
-            ) from error
+            raise AudioError("The file could not be read as audio.") from error
 
         if info.frames == 0:
             raise AudioError("The audio file contains no samples.")
@@ -119,7 +233,7 @@ class SpoofDetector:
             "analysed_seconds": round(min(duration, MAX_DURATION), 3),
             "sample_rate": int(sample_rate),
             "channels": int(info.channels),
-            "format": info.format,
+            "format": file_format,
             "warnings": warnings,
             "model": MODEL_NAME,
         }

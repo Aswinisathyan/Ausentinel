@@ -7,14 +7,23 @@ from flask import Flask, jsonify, render_template, request
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
-from inference import AudioError, SpoofDetector
+from inference import (
+    AudioError,
+    SpoofDetector,
+    SUPPORTED_EXTENSIONS,
+    UNRELIABLE_EXTENSIONS,
+)
 
 
 # --------------------------------------------------
 # 1. SETTINGS
 # --------------------------------------------------
 
-ALLOWED_EXTENSIONS = {".wav", ".flac"}
+ALLOWED_EXTENSIONS = SUPPORTED_EXTENSIONS
+
+ALLOWED_NAMES = ", ".join(
+    sorted(extension.lstrip(".").upper() for extension in ALLOWED_EXTENSIONS)
+)
 
 MAX_UPLOAD_MB = 20
 
@@ -54,9 +63,12 @@ def score_upload(detector, upload_dir):
 
     extension = Path(filename).suffix.lower()
 
+    if extension in UNRELIABLE_EXTENSIONS:
+        raise UploadError(UNRELIABLE_EXTENSIONS[extension], 415)
+
     if extension not in ALLOWED_EXTENSIONS:
         raise UploadError(
-            "Unsupported file type. Please upload a WAV or FLAC file.",
+            f"Unsupported file type. Please upload one of: {ALLOWED_NAMES}.",
             415,
         )
 
@@ -101,7 +113,8 @@ def create_app(detector=None, upload_dir=None):
         return render_template(
             "index.html",
             max_upload_mb=MAX_UPLOAD_MB,
-            allowed=", ".join(sorted(e.lstrip(".").upper() for e in ALLOWED_EXTENSIONS)),
+            allowed=ALLOWED_NAMES,
+            accept=",".join(sorted(ALLOWED_EXTENSIONS)),
             **context,
         ), status
 
@@ -153,6 +166,8 @@ def create_app(detector=None, upload_dir=None):
 
 if __name__ == "__main__":
 
+    # Flask's development server, for local testing only.
+    # Use serve.py (Waitress) to run the app for other people.
     # Debug mode is off unless FLASK_DEBUG=1 is set
     create_app().run(
         host="127.0.0.1",
