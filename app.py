@@ -3,16 +3,18 @@ from pathlib import Path
 import os
 import tempfile
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, abort, jsonify, render_template, request, send_file
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
+from features import MAX_DURATION
 from inference import (
     AudioError,
     SpoofDetector,
     SUPPORTED_EXTENSIONS,
     UNRELIABLE_EXTENSIONS,
 )
+from results_data import load_results
 
 
 # --------------------------------------------------
@@ -33,6 +35,16 @@ RESULT_NOTE = (
     "on real-world recordings has not been measured. Treat this result as "
     "an experimental prediction, not a verdict."
 )
+
+# Scores this close to the threshold are often wrong. Within 0.5 of the
+# threshold, balanced accuracy was 68.8% on dev (19.7% of files) and
+# 65.0% on eval, against 97.9% and 83.8% further away.
+BORDERLINE_MARGIN = 0.5
+
+# Range drawn on the score scale; covers the 1st-99th percentile of
+# dev and eval scores. Scores outside it are pinned to the ends.
+SCALE_MIN = -4.0
+SCALE_MAX = 5.0
 
 
 class UploadError(Exception):
@@ -90,30 +102,79 @@ def score_upload(detector, upload_dir):
         os.remove(temp_path)
 
     result["filename"] = filename
+    result["borderline"] = abs(result["margin"]) < BORDERLINE_MARGIN
     result["note"] = RESULT_NOTE
 
     return result
+
+
+def scale_position(score):
+    """Percentage position of a score on the drawn scale, kept within 0-100."""
+
+    share = (score - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)
+
+    return round(min(max(share, 0.0), 1.0) * 100, 2)
+
+
+def present(result):
+    """Wording and positions the result card needs."""
+
+    leaning = "spoof" if result["is_spoof"] else "bona fide"
+
+    if result["borderline"]:
+        verdict = f"Borderline, leaning {leaning}"
+        tone = "warning"
+    elif result["is_spoof"]:
+        verdict = "Likely spoof"
+        tone = "critical"
+    else:
+        verdict = "Likely bona fide"
+        tone = "good"
+
+    direction = "above" if result["margin"] >= 0 else "below"
+
+    return {
+        "verdict": verdict,
+        "tone": tone,
+        "direction": direction,
+        "distance": abs(result["margin"]),
+        "score_position": scale_position(result["score"]),
+        "threshold_position": scale_position(result["threshold"]),
+        "band_low": scale_position(result["threshold"] - BORDERLINE_MARGIN),
+        "band_high": scale_position(result["threshold"] + BORDERLINE_MARGIN),
+        "off_scale": not SCALE_MIN <= result["score"] <= SCALE_MAX,
+    }
 
 
 # --------------------------------------------------
 # 3. APPLICATION
 # --------------------------------------------------
 
-def create_app(detector=None, upload_dir=None):
+def create_app(detector=None, upload_dir=None, results=None):
 
     app = Flask(__name__)
 
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
     app.config["UPLOAD_DIR"] = upload_dir
 
-    # Load the model once, when the app starts
+    # Load the model and saved results once, when the app starts
     detector = detector or SpoofDetector()
+    results = results if results is not None else load_results()
+
+    @app.context_processor
+    def shared():
+        return {
+            "threshold": detector.threshold,
+            "borderline_margin": BORDERLINE_MARGIN,
+            "max_duration": MAX_DURATION,
+            "max_upload_mb": MAX_UPLOAD_MB,
+            "allowed": ALLOWED_NAMES,
+        }
 
     def page(status=200, **context):
         return render_template(
             "index.html",
-            max_upload_mb=MAX_UPLOAD_MB,
-            allowed=ALLOWED_NAMES,
+            active="analyse",
             accept=",".join(sorted(ALLOWED_EXTENSIONS)),
             **context,
         ), status
@@ -130,7 +191,26 @@ def create_app(detector=None, upload_dir=None):
         except UploadError as error:
             return page(error.status, error=error.message)
 
-        return page(result=result)
+        return page(result=result, view=present(result))
+
+    @app.get("/results")
+    def results_page():
+        return render_template("results.html", active="results", results=results)
+
+    @app.get("/about")
+    def about_page():
+        return render_template("about.html", active="about", results=results)
+
+    @app.get("/charts/<name>")
+    def chart(name):
+
+        # Only named charts can be served, never arbitrary paths
+        chart_info = results["charts"].get(name)
+
+        if chart_info is None:
+            abort(404)
+
+        return send_file(chart_info["path"], mimetype="image/png", max_age=3600)
 
     @app.post("/api/predict")
     def predict_api():

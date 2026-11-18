@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}About | Ausentinel{% endblock %}
+
+{% block content %}
+<section class="intro">
+  <h1>About Ausentinel</h1>
+  <p class="lead">Ausentinel is a research prototype that detects <strong>spoofed speech</strong>:
+    recordings made by text-to-speech or voice conversion instead of a real person.</p>
+</section>
+
+<section class="card">
+  <h2>How it works</h2>
+  <ol class="steps">
+    <li><strong>Prepare the audio.</strong> The recording is converted to one channel at 16,000 samples per second,
+      and cut or padded to exactly {{ max_duration|int }} seconds.</li>
+    <li><strong>Describe the sound.</strong> The audio is split into short overlapping slices. For each slice, the
+      energy in 20 equally spaced frequency bands is measured and compressed into 20 numbers called
+      <em>LFCCs</em> (linear frequency cepstral coefficients).</li>
+    <li><strong>Summarise.</strong> The averages, spreads and changes over time of those numbers give
+      80 features for the whole clip.</li>
+    <li><strong>Score.</strong> A support vector machine (SVM), trained on thousands of real and fake recordings,
+      turns the 80 features into one score. Higher means more spoof-like.</li>
+    <li><strong>Decide.</strong> Scores at or above {{ "%.4f"|format(threshold) }} are called spoof.</li>
+  </ol>
+</section>
+
+<section class="card">
+  <h2>Reading your result</h2>
+  <dl class="glossary">
+    <dt>Score</dt>
+    <dd>Where the recording falls relative to the model's boundary between real and fake. It is <em>not</em>
+      a probability, so the app does not show a confidence percentage.</dd>
+    <dt>Threshold ({{ "%.4f"|format(threshold) }})</dt>
+    <dd>The cut-off point. It was chosen on development data so that the share of spoofs missed and the share
+      of real voices flagged were about equal (around 7.2% each).</dd>
+    <dt>Borderline (within &plusmn;{{ borderline_margin }})</dt>
+    <dd>About 1 in 5 development recordings scored this close to the threshold. For them, balanced accuracy
+      was 68.8%, against 97.9% for the rest. Treat borderline results with extra caution.</dd>
+  </dl>
+</section>
+
+<section class="card" id="formats">
+  <h2>Files and privacy</h2>
+  <ul>
+    <li>Accepted formats: {{ allowed }}, up to {{ max_upload_mb }} MB.</li>
+    <li>Only the first {{ max_duration|int }} seconds are analysed.</li>
+    <li><strong>MP3 is not accepted.</strong> In testing, MP3 compression made all 30 real recordings in a
+      sample look fake, because it removes high-frequency sound that this model depends on.
+      M4A had no such effect.</li>
+    <li>Uploaded files are deleted as soon as they have been scored. They are never stored.</li>
+  </ul>
+</section>
+
+<section class="card">
+  <h2>Limitations</h2>
+  <ul>
+    <li>On attack methods it never saw in training, the model misses about a third of spoofs.
+      <a href="{{ url_for('results_page') }}">See the results.</a></li>
+    <li>It was trained on clean studio recordings. Phone calls, background noise and other audio processing
+      have not been tested.</li>
+    <li>The 2019 attack methods are older than many voice-cloning tools available today.</li>
+    <li>It is a research prototype. Do not use it as the only basis for a security decision.</li>
+  </ul>
+</section>
+
+<section class="card">
+  <h2>Technology</h2>
+  <p>Python, librosa and SciPy for audio processing; scikit-learn for the StandardScaler and SVM with an RBF kernel;
+    Flask and Waitress for the web app; ffmpeg for M4A conversion.</p>
+  <p class="small muted">Trained and evaluated on the ASVspoof 2019 Logical Access database.
+    See the dataset's licence file for its terms of use.</p>
+</section>
+{% endblock %}

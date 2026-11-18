@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% macro pct(value) %}{{ "%.2f"|format(value * 100) }}%{% endmacro %}
+
+{% macro attack_bars(attacks, label) %}
+<ul class="bars" aria-label="{{ label }}">
+  {% for a in attacks %}
+  <li class="bar-row">
+    <span class="bar-name"><strong>{{ a.attack }}</strong> <span class="muted">{{ a.type }}</span></span>
+    <span class="bar-track"><span class="bar-fill" style="width: {{ '%.2f'|format(a.apcer * 100) }}%"></span></span>
+    <span class="bar-value">{{ pct(a.apcer) }}</span>
+  </li>
+  {% endfor %}
+</ul>
+<details class="details">
+  <summary>Show as a table</summary>
+  <div class="table-scroll">
+    <table class="data">
+      <thead><tr><th scope="col">Attack</th><th scope="col">Type</th><th scope="col">Spoof files</th><th scope="col">Missed</th><th scope="col">APCER</th></tr></thead>
+      <tbody>
+        {% for a in attacks %}
+        <tr><td>{{ a.attack }}</td><td>{{ a.type }}</td><td>{{ "{:,}".format(a.files) }}</td><td>{{ "{:,}".format(a.missed) }}</td><td>{{ pct(a.apcer) }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</details>
+{% endmacro %}
+
+{% macro chart(name) %}
+{% set c = results.charts.get(name) %}
+{% if c %}
+<figure class="chart">
+  <img src="{{ url_for('chart', name=name) }}" alt="{{ c.alt }}" loading="lazy">
+  <figcaption>{{ c.title }}</figcaption>
+</figure>
+{% endif %}
+{% endmacro %}
+
+{% block title %}Results | Ausentinel{% endblock %}
+
+{% block content %}
+<section class="intro">
+  <h1>How accurate is Ausentinel?</h1>
+  <p class="lead">The model was tested twice: on the <strong>development set</strong>, which uses the same
+    six attack methods it was trained on, and once on the <strong>evaluation set</strong>, which uses
+    13 attack methods it had never seen. The second test is the honest one.</p>
+</section>
+
+{% set dev = results.dev %}
+{% set ev = results.eval %}
+
+{% if dev or ev %}
+<section class="card">
+  <h2>Development vs evaluation</h2>
+  <p class="small muted">All results use the same frozen threshold ({{ "%.4f"|format(threshold) }}), chosen on development data only.</p>
+  <div class="table-scroll">
+    <table class="data compare">
+      <thead>
+        <tr><th scope="col">Measure</th><th scope="col">Development<br><span class="muted">attacks seen in training</span></th><th scope="col">Evaluation<br><span class="muted">new, unseen attacks</span></th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">Spoofs missed (APCER)</th><td>{{ pct(dev.apcer) if dev else "n/a" }}</td><td>{{ pct(ev.apcer) if ev else "n/a" }}</td></tr>
+        <tr><th scope="row">Real speech flagged (BPCER)</th><td>{{ pct(dev.bpcer) if dev else "n/a" }}</td><td>{{ pct(ev.bpcer) if ev else "n/a" }}</td></tr>
+        <tr><th scope="row">Average error (ACER)</th><td>{{ pct(dev.acer) if dev else "n/a" }}</td><td>{{ pct(ev.acer) if ev else "n/a" }}</td></tr>
+        <tr><th scope="row">Equal error rate (EER)</th><td>{{ pct(dev.eer) if dev else "n/a" }}</td><td>{{ pct(ev.eer) if ev else "n/a" }}</td></tr>
+        <tr><th scope="row">Accuracy</th><td>{{ pct(dev.accuracy) if dev else "n/a" }}</td><td>{{ pct(ev.accuracy) if ev else "n/a" }}</td></tr>
+        <tr><th scope="row">ROC-AUC</th><td>{{ "%.4f"|format(dev.auc) if dev else "n/a" }}</td><td>{{ "%.4f"|format(ev.auc) if ev else "n/a" }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+  {% if dev %}
+  <p class="small muted">Development ACER 95% interval, resampling speakers:
+    {{ pct(dev.acer_low) }} to {{ pct(dev.acer_high) }}.{% if ev %} Evaluation set: {{ "{:,}".format(ev.files) }} files.{% endif %}</p>
+  {% endif %}
+</section>
+
+<div class="card alert alert-warning">
+  <span class="alert-icon" aria-hidden="true">!</span>
+  <div><strong>What this means.</strong> On attack methods it was trained on, Ausentinel misses about
+    {{ pct(dev.apcer) if dev else "a small share" }} of spoofs. On new attack methods it misses
+    {{ pct(ev.apcer) if ev else "far more" }}. Real voices are rarely flagged in either test.
+    A result of "bona fide" is therefore much weaker evidence than a result of "spoof".</div>
+</div>
+
+<section class="card">
+  <h2>Spoofs missed, by attack method</h2>
+  <p class="small muted">APCER is the share of spoof recordings from each attack method that the model called real. Lower is better.</p>
+  {% if dev %}
+  <h3>Development set (attacks seen in training)</h3>
+  {{ attack_bars(dev.attacks, "Development set APCER by attack") }}
+  {% endif %}
+  {% if ev %}
+  <h3>Evaluation set (new attacks)</h3>
+  {{ attack_bars(ev.attacks, "Evaluation set APCER by attack") }}
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Charts</h2>
+  <div class="chart-grid">
+    {{ chart("dev-acer") }}
+    {{ chart("dev-det") }}
+    {{ chart("eval-scores") }}
+    {{ chart("eval-confusion") }}
+  </div>
+</section>
+{% else %}
+<div class="card alert alert-warning">
+  <span class="alert-icon" aria-hidden="true">!</span>
+  <div>Saved results are not available on this server. Run <code>threshold_study.py</code>
+    and <code>final_evaluation.py</code> to create them.</div>
+</div>
+{% endif %}
+{% endblock %}
